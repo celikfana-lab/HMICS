@@ -10,29 +10,37 @@
     throw new Error("HMICB Reader must be run unsandboxed!");
   }
 
-  // --- REQUIRED: Detect HMIC-S/B engine ---
-  const hmicEngine =
-    Scratch.extensions.getExtension("hmicb") ||
-    Scratch.extensions.getExtension("hmics") ||
-    Scratch.extensions.getExtension("HMICB") ||
-    Scratch.extensions.getExtension("HMICS");
+  // ----------------------------
+  // WAIT FOR PEN+ (REAL FIX)
+  // ----------------------------
 
-  if (!hmicEngine) {
-    alert("⚠️ HMICB/HMICS engine not loaded! Load the engine BEFORE this reader.");
-    return;
+  async function waitForPenPlus() {
+    return new Promise(resolve => {
+      const check = () => {
+        const pp =
+          window.PenPlus ||
+          window.penPlus ||
+          window.penp ||
+          window.penP ||
+          window.pen_renderer ||
+          window.penRenderer;
+
+        if (pp && typeof pp.drawPixel === "function") {
+          console.log("[HMICB Reader] Pen+ found:", pp);
+          resolve(pp);
+        } else {
+          setTimeout(check, 50);
+        }
+      };
+      check();
+    });
   }
 
-  // Pen+ loader
-  const penPlus =
-    Scratch.extensions.getExtension("penP") ||
-    Scratch.extensions.getExtension("penplus") ||
-    Scratch.extensions.getExtension("penPlus");
+  // -----------------------------------
+  // HMICB READER IMPLEMENTATION
+  // -----------------------------------
 
-  if (!penPlus) {
-    alert("⚠️ Please load Pen+ (penPlus.js) before this extension!");
-    return;
-  }
-
+  let penPlus = null;
   let animation = null;
   let frames = [];
   let currentFrame = 0;
@@ -57,12 +65,12 @@
     });
   }
 
-  // --- FIXED HMICB PARSER ---
   function parseHMICB(data) {
     let o = 0;
 
-    const magic = String.fromCharCode(...data.slice(0, 5));
-    if (magic !== "HMICB") throw new Error("Invalid file (missing HMICB header)");
+    if (String.fromCharCode(...data.slice(0, 5)) !== "HMICB") {
+      throw new Error("Invalid HMICB file.");
+    }
     o += 5;
 
     const version = data[o++];
@@ -84,11 +92,10 @@
 
     loop = data[o++] === 1;
 
-    const compression = data[o++]; // <-- FIXED you incorrectly skipped this
-    o += 14; // reserved block
+    const compression = data[o++];
+    o += 14;
 
     const index = [];
-
     for (let i = 0; i < totalFrames; i++) {
       const frameOffset =
         data[o] |
@@ -96,12 +103,14 @@
         (data[o + 2] << 16) |
         (data[o + 3] << 24);
       o += 4;
+
       const frameSize =
         data[o] |
         (data[o + 1] << 8) |
         (data[o + 2] << 16) |
         (data[o + 3] << 24);
       o += 4;
+
       const frameType = data[o++];
       index.push({ frameOffset, frameSize, frameType });
     }
@@ -109,22 +118,20 @@
     frames = [];
     let prevFrame = null;
 
-    for (let i = 0; i < index.length; i++) {
-      const { frameOffset, frameSize, frameType } = index[i];
-      const chunk = data.slice(frameOffset, frameOffset + frameSize);
+    for (const entry of index) {
+      const chunk = data.slice(entry.frameOffset, entry.frameOffset + entry.frameSize);
 
-      if (frameType === 0) {
+      if (entry.frameType === 0) {
         // Keyframe
-        const key = new Uint8ClampedArray(chunk); // FIX: ensure separate buffer
-        frames.push(key);
-        prevFrame = key;
+        const full = new Uint8ClampedArray(chunk);
+        frames.push(full);
+        prevFrame = full;
       } else {
-        // Delta frame
-        if (!prevFrame) throw new Error("Delta frame encountered before keyframe");
+        if (!prevFrame) throw new Error("Delta before keyframe.");
 
-        const out = new Uint8ClampedArray(prevFrame); // copy previous frame
-
+        const out = new Uint8ClampedArray(prevFrame);
         let pos = 0;
+
         const count =
           chunk[pos++] |
           (chunk[pos++] << 8) |
@@ -136,7 +143,6 @@
           const y = chunk[pos++] | (chunk[pos++] << 8);
 
           const idx = (y * width + x) * 4;
-
           out[idx] = chunk[pos++];
           out[idx + 1] = chunk[pos++];
           out[idx + 2] = chunk[pos++];
@@ -151,25 +157,24 @@
     animation = { width, height, totalFrames, version, compression };
   }
 
-  // --- FIXED DRAWING ---
   function drawFrame(n) {
     if (!animation || !frames[n]) return;
 
     const { width, height } = animation;
     const pixels = frames[n];
 
-    penPlus.clearFast(); // FIX: prevents flicker
+    penPlus.clearFast?.() || penPlus.clear?.();
 
     let i = 0;
     for (let y = 0; y < height; y++) {
-      const yy = height - 1 - y; // FIXED Y invert
+      const yy = height - 1 - y;
       for (let x = 0; x < width; x++) {
         const r = pixels[i++];
         const g = pixels[i++];
         const b = pixels[i++];
         const a = pixels[i++];
 
-        if (a) {
+        if (a > 0) {
           penPlus.setPenColor([r, g, b]);
           penPlus.drawPixel(x, yy);
         }
@@ -221,9 +226,9 @@
             opcode: "drawFrame",
             blockType: Scratch.BlockType.COMMAND,
             text: "draw frame [n]",
-            arguments: { n: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }},
-          },
-        ],
+            arguments: { n: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 } },
+          }
+        ]
       };
     }
 
@@ -232,16 +237,25 @@
       parseHMICB(data);
       currentFrame = 0;
       drawFrame(0);
-      console.log("Loaded HMICB:", animation);
+      console.log("[HMICB Reader] Loaded:", animation);
     }
+
     play() { play(); }
     pause() { pause(); }
     stop() { stop(); }
+
     drawFrame({ n }) {
       const clamped = Math.max(0, Math.min(frames.length - 1, Math.floor(n)));
       drawFrame(clamped);
     }
   }
 
-  Scratch.extensions.register(new HMICBReader());
+  // -----------------------------------
+  // REGISTER EXTENSION *AFTER* Pen+
+  // -----------------------------------
+  waitForPenPlus().then(pp => {
+    penPlus = pp;
+    Scratch.extensions.register(new HMICBReader());
+  });
+
 })(Scratch);
