@@ -10,9 +10,11 @@
     throw new Error("HMICB Reader must be run unsandboxed!");
   }
 
-  const penPlus =
-    Scratch.extensions.getExtension("penplus") ||
-    Scratch.extensions.getExtension("penPlus");
+const penPlus =
+  Scratch.extensions.getExtension("penP") ||
+  Scratch.extensions.getExtension("penplus") ||
+  Scratch.extensions.getExtension("penPlus");
+
 
   if (!penPlus) {
     alert("⚠️ Please load Pen+ (penPlus.js) before this extension!");
@@ -237,4 +239,5 @@
 
   Scratch.extensions.register(new HMICBReader());
 })(Scratch);
+
 
