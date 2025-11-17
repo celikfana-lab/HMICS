@@ -35,7 +35,17 @@
                     {
                         opcode: "matchAll",
                         blockType: Scratch.BlockType.REPORTER,
-                        text: "all regex matches [pattern] with flags [flags] in [text]",
+                        text: "ALL regex matches [pattern] with flags [flags] in [text] (JSON list)",
+                        arguments: {
+                            pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "\\w+" },
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "g" },
+                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "one two three" }
+                        }
+                    },
+                    {
+                        opcode: "countMatches",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "COUNT regex matches [pattern] with flags [flags] in [text]",
                         arguments: {
                             pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "\\w+" },
                             flags: { type: Scratch.ArgumentType.STRING, defaultValue: "g" },
@@ -118,12 +128,21 @@
             return m ? m[0] : "";
         }
 
+        // 🔥🔥🔥 MAX CONTROL MATCHALL (REAL JSON LIST) 🔥🔥🔥
         matchAll({ pattern, flags, text }) {
-            if (!flags.includes("g")) flags += "g"; // enforce global
+            if (!flags.includes("g")) flags += "g";
             const r = this.makeRegex(pattern, flags);
-            if (!r) return "";
+            if (!r) return "[]";
             const arr = [...text.matchAll(r)].map(x => x[0]);
-            return arr.join(", ");
+            return JSON.stringify(arr);
+        }
+
+        // 🔥 Count matches
+        countMatches({ pattern, flags, text }) {
+            if (!flags.includes("g")) flags += "g";
+            const r = this.makeRegex(pattern, flags);
+            if (!r) return 0;
+            return [...text.matchAll(r)].length;
         }
 
         captureGroup({ n, pattern, flags, text }) {
@@ -155,7 +174,6 @@
         }
 
         escape({ text }) {
-            // standard JS escape for regex
             return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         }
     }
