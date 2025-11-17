@@ -15,64 +15,148 @@
                     {
                         opcode: "test",
                         blockType: Scratch.BlockType.BOOLEAN,
-                        text: "regex [pattern] matches [text]",
+                        text: "regex [pattern] with flags [flags] matches [text]",
                         arguments: {
                             pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "h.+o" },
-                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "hello" }
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "i" },
+                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "HELLO" }
                         }
                     },
                     {
                         opcode: "match",
                         blockType: Scratch.BlockType.REPORTER,
-                        text: "first regex match [pattern] in [text]",
+                        text: "first regex match [pattern] with flags [flags] in [text]",
                         arguments: {
                             pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "\\d+" },
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "" },
                             text: { type: Scratch.ArgumentType.STRING, defaultValue: "age 14 lol" }
                         }
                     },
                     {
                         opcode: "matchAll",
                         blockType: Scratch.BlockType.REPORTER,
-                        text: "all regex matches [pattern] in [text]",
+                        text: "all regex matches [pattern] with flags [flags] in [text]",
                         arguments: {
                             pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "\\w+" },
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "g" },
                             text: { type: Scratch.ArgumentType.STRING, defaultValue: "one two three" }
+                        }
+                    },
+                    {
+                        opcode: "captureGroup",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "group [n] of [pattern] with flags [flags] in [text]",
+                        arguments: {
+                            n: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+                            pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "(\\d+)-(...)" },
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "" },
+                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "123-abc" }
+                        }
+                    },
+                    {
+                        opcode: "indexOfMatch",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "index of first match [pattern] with flags [flags] in [text]",
+                        arguments: {
+                            pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "cat" },
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "" },
+                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "my cat is vibing" }
+                        }
+                    },
+                    {
+                        opcode: "replaceOne",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "replace first [pattern] with [repl] in [text] (flags [flags])",
+                        arguments: {
+                            pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "a" },
+                            repl: { type: Scratch.ArgumentType.STRING, defaultValue: "🍕" },
+                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "banana" },
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "" }
+                        }
+                    },
+                    {
+                        opcode: "replaceAll",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "replace all [pattern] with [repl] in [text] (flags [flags])",
+                        arguments: {
+                            pattern: { type: Scratch.ArgumentType.STRING, defaultValue: "\\d" },
+                            repl: { type: Scratch.ArgumentType.STRING, defaultValue: "#" },
+                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "a1b2c3" },
+                            flags: { type: Scratch.ArgumentType.STRING, defaultValue: "g" }
+                        }
+                    },
+                    {
+                        opcode: "escape",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "escape text [text] for regex",
+                        arguments: {
+                            text: { type: Scratch.ArgumentType.STRING, defaultValue: "hello. (world)?" }
                         }
                     }
                 ]
             };
         }
 
-        test({ pattern, text }) {
+        makeRegex(pattern, flags) {
             try {
-                const r = new RegExp(pattern);
-                return r.test(text);
+                return new RegExp(pattern, flags);
             } catch (e) {
-                console.error("regex go kaboom 💥", e);
-                return false;
+                console.error("regex went kapow 💥", e);
+                return null;
             }
         }
 
-        match({ pattern, text }) {
-            try {
-                const r = new RegExp(pattern);
-                const m = text.match(r);
-                return m ? m[0] : "";
-            } catch (e) {
-                console.error("regex big sad 😭", e);
-                return "";
-            }
+        test({ pattern, flags, text }) {
+            const r = this.makeRegex(pattern, flags);
+            return r ? r.test(text) : false;
         }
 
-        matchAll({ pattern, text }) {
-            try {
-                const r = new RegExp(pattern, "g");
-                const m = [...text.matchAll(r)].map(x => x[0]);
-                return m.join(", ");
-            } catch (e) {
-                console.error("regex exploded 💀", e);
-                return "";
-            }
+        match({ pattern, flags, text }) {
+            const r = this.makeRegex(pattern, flags);
+            if (!r) return "";
+            const m = text.match(r);
+            return m ? m[0] : "";
+        }
+
+        matchAll({ pattern, flags, text }) {
+            if (!flags.includes("g")) flags += "g"; // enforce global
+            const r = this.makeRegex(pattern, flags);
+            if (!r) return "";
+            const arr = [...text.matchAll(r)].map(x => x[0]);
+            return arr.join(", ");
+        }
+
+        captureGroup({ n, pattern, flags, text }) {
+            const r = this.makeRegex(pattern, flags);
+            if (!r) return "";
+            const match = text.match(r);
+            if (!match) return "";
+            return match[n] || "";
+        }
+
+        indexOfMatch({ pattern, flags, text }) {
+            const r = this.makeRegex(pattern, flags);
+            if (!r) return -1;
+            const m = r.exec(text);
+            return m ? m.index : -1;
+        }
+
+        replaceOne({ pattern, repl, text, flags }) {
+            const r = this.makeRegex(pattern, flags);
+            if (!r) return text;
+            return text.replace(r, repl);
+        }
+
+        replaceAll({ pattern, repl, text, flags }) {
+            if (!flags.includes("g")) flags += "g";
+            const r = this.makeRegex(pattern, flags);
+            if (!r) return text;
+            return text.replace(r, repl);
+        }
+
+        escape({ text }) {
+            // standard JS escape for regex
+            return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         }
     }
 
